@@ -1,3 +1,10 @@
 google-api-python-client
 motor
 pydantic_settings
+bcrypt
+jwt
+fastapi
+uvicorn
+authlib
+httpx
+pydantic[email]
