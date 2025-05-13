@@ -1,0 +1,3 @@
+google-api-python-client
+motor
+pydantic_settings
