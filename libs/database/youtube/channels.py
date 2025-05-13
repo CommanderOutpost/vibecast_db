@@ -11,3 +11,7 @@ async def create_channel(name: str, youtube_channel_id: str):
 
 async def get_channel_by_youtube_id(youtube_channel_id: str):
     return await db.channels.find_one({"youtube_channel_id": youtube_channel_id})
+
+
+async def get_channel_by_id(channel_id: str):
+    return await db.channels.find_one({"_id": ObjectId(channel_id)})

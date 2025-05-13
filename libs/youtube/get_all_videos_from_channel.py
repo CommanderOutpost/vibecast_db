@@ -1,8 +1,11 @@
 from googleapiclient.discovery import build
 from typing import List, Dict
+from database.youtube.videos import create_videos
 
 
-def get_all_videos_from_channel(api_key: str, channel_id: str) -> List[Dict]:
+async def get_all_videos_from_channel(
+    api_key: str, channel_id: str, mongo_channel_id: str
+) -> List[Dict]:
     """
     Fetches all videos from a YouTube channel using its uploads playlist.
 
@@ -52,21 +55,20 @@ def get_all_videos_from_channel(api_key: str, channel_id: str) -> List[Dict]:
         )
 
         for item in video_details_response["items"]:
-            video_id = item["id"]
-            title = item["snippet"]["title"]
-            publish_time = item["snippet"]["publishedAt"]
-            view_count = item["statistics"].get("viewCount", "0")
             videos.append(
                 {
-                    "videoId": video_id,
-                    "title": title,
-                    "publishTime": publish_time,
-                    "viewCount": view_count,
+                    "name": item["snippet"]["title"],
+                    "youtube_video_id": item["id"],
+                    "publish_time": item["snippet"]["publishedAt"],
+                    "view_count": int(item["statistics"].get("viewCount", 0)),
+                    "channel_id": mongo_channel_id,
                 }
             )
 
         next_page_token = playlist_response.get("nextPageToken")
         if not next_page_token:
             break
+
+    await create_videos(videos)
 
     return videos

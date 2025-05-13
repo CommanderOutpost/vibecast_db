@@ -1,8 +1,9 @@
 from googleapiclient.discovery import build
 from typing import List
+from database.youtube.comments import create_comments
 
 
-def get_youtube_comments(
+async def get_youtube_comments(
     api_key: str, video_id: str, max_comments: int = 100
 ) -> List[str]:
     """
@@ -39,5 +40,7 @@ def get_youtube_comments(
         next_page_token = response.get("nextPageToken")
         if not next_page_token:
             break
+
+    await create_comments(video_id, comments)
 
     return comments
