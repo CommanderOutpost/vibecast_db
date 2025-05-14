@@ -3,8 +3,10 @@ motor
 pydantic_settings
 bcrypt
 jwt
-fastapi
+fastapi[all]
 uvicorn
 authlib
 httpx
 pydantic[email]
+python-jose[cryptography]
+starlette[session]

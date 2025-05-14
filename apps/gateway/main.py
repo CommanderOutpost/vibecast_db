@@ -17,7 +17,7 @@ app = FastAPI(title="Gateway")
 # ---------------------------------------------------------------------------
 # configuration knobs (env-controlled)
 # ---------------------------------------------------------------------------
-USERS_SERVICE_URL = os.getenv("USERS_SERVICE_URL", "http://users:8000")
+USERS_SERVICE_URL = os.getenv("USERS_SERVICE_URL", "http://users:8001")
 MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", 1 * 1024 * 1024))  # 1 MiB
 REQUESTS_PER_MINUTE = int(os.getenv("REQUESTS_PER_MINUTE", 60))
 

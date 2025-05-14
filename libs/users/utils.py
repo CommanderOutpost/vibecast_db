@@ -1,5 +1,8 @@
 import bcrypt
-import jwt
+from jose import jwt as jose_jwt
+import inspect
+
+# print(">> utils is using jwt from:", inspect.getsourcefile(jwt))
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from config.config import settings
@@ -43,7 +46,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=1))
     to_encode.update({"exp": expire})
-    token = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
+    token = jose_jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
     return token
 
 
@@ -54,13 +57,29 @@ async def get_google_authorization_url(request, redirect_uri: str) -> str:
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
-async def exchange_google_code(request, redirect_uri: str) -> dict:
+async def exchange_google_code(request) -> dict:
     """
-    Exchange the callback code for tokens+userinfo.
-    Returns: {"google_id", "email", "username"}.
+    Turn the code in the callback query into tokens + user profile.
+    Always returns: {"google_id", "email", "username"}.
     """
-    token = await oauth.google.authorize_access_token(request, redirect_uri)
-    userinfo = await oauth.google.parse_id_token(request, token)
+    token = await oauth.google.authorize_access_token(request)
+
+    userinfo = None
+    if "id_token" in token:
+        try:
+            userinfo = await oauth.google.parse_id_token(request, token)
+        except Exception:
+            userinfo = None
+
+    if userinfo is None:
+        # — change starts here —
+        # call the full UserInfo URL instead of the short string
+        resp = await oauth.google.get(
+            "https://openidconnect.googleapis.com/v1/userinfo", token=token
+        )
+        userinfo = resp.json()
+        # — change ends here —
+
     return {
         "google_id": userinfo["sub"],
         "email": userinfo["email"],

@@ -3,12 +3,20 @@
 # FastAPI service exposing user-centric endpoints.
 # All the heavy logic lives in libs/users/service.py.
 
-from fastapi import FastAPI, Request, HTTPException, Depends, status
+from fastapi import FastAPI, Header, Request, HTTPException, Depends, status
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, EmailStr
 from libs.users import service
-from libs.users.utils import jwt, settings  # for auth dependency
+from config.config import settings
+from jose import jwt as jose_jwt
+from jose.exceptions import JWTError
 
 app = FastAPI(title="Users Service")
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SESSION_SECRET_KEY,
+)
 
 # ---------------------------------------------------------------------------
 # request/response models
@@ -37,22 +45,20 @@ class ChannelBody(BaseModel):
 
 
 def get_current_user_id(
-    token: str = Depends(
-        lambda authorization: authorization.headers.get("Authorization")
-    ),
-):
+    authorization: str = Header(..., description="Bearer <token>")
+) -> str:
     """
-    Very small helper that decodes our own JWT and returns the user’s id.
-    Expects header:  Authorization: Bearer <jwt>
+    Expects header: Authorization: Bearer <jwt>
     """
-    if not token or not token.startswith("Bearer "):
+    if not authorization.startswith("Bearer "):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing bearer token",
         )
-    _, jwt_token = token.split(" ", 1)
+    token = authorization.split(" ", 1)[1]
     try:
-        payload = jwt.decode(jwt_token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
-    except jwt.PyJWTError:
+        payload = jose_jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
@@ -66,34 +72,46 @@ def get_current_user_id(
 
 @app.post("/signup", status_code=201)
 async def signup(body: SignupBody):
-    jwt_token = await service.signup(body.username, body.email, body.password)
-    return {"access_token": jwt_token, "token_type": "bearer"}
+    try:
+        jwt_token = await service.signup(body.username, body.email, body.password)
+        return {"access_token": jwt_token, "token_type": "bearer"}
+    except ValueError as e:
+        # duplicate email → 409 Conflict
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @app.post("/login")
 async def login(body: LoginBody):
-    jwt_token = await service.login(body.email, body.password)
-    return {"access_token": jwt_token, "token_type": "bearer"}
+    try:
+        jwt_token = await service.login(body.email, body.password)
+        return {"access_token": jwt_token, "token_type": "bearer"}
+    except ValueError as e:
+        # invalid credentials → 401 Unauthorized
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 
 @app.get("/auth/google/login")
 async def google_login(request: Request):
-    """
-    Generates the Google consent-screen URL and redirects the browser there.
-    """
-    redirect_uri = str(request.url_for("google_callback"))
-    return await service.get_google_login_url(request, redirect_uri)
+    try:
+        redirect_uri = str(request.url_for("google_callback"))
+        return await service.get_google_login_url(request, redirect_uri)
+    except ValueError as e:
+        # any oauth error → 400 Bad Request
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @app.get("/auth/google/callback", name="google_callback")
 async def google_callback(request: Request):
     """
-    Google calls this after the user grants permission.
-    We exchange the code, create/lookup the user, then hand back our JWT.
+    Google lands here after the consent screen.
+    We just hand the Request to our service layer.
     """
-    redirect_uri = str(request.url_for("google_callback"))
-    jwt_token = await service.handle_google_callback(request, redirect_uri)
-    return {"access_token": jwt_token, "token_type": "bearer"}
+    try:
+        jwt_token = await service.handle_google_callback(request)
+        return {"access_token": jwt_token, "token_type": "bearer"}
+    except ValueError as e:
+        # nice 400 instead of 500 on logical issues
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
@@ -105,19 +123,28 @@ async def google_callback(request: Request):
 async def subscribe_channel(
     body: ChannelBody, user_id: str = Depends(get_current_user_id)
 ):
-    await service.subscribe_channel(user_id, body.channel_id, body.is_owner)
-    return {"detail": "subscribed"}
+    try:
+        await service.subscribe_channel(user_id, body.channel_id, body.is_owner)
+        return {"detail": "subscribed"}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @app.post("/channels/unsubscribe")
 async def unsubscribe_channel(
     body: ChannelBody, user_id: str = Depends(get_current_user_id)
 ):
-    await service.unsubscribe_channel(user_id, body.channel_id)
-    return {"detail": "unsubscribed"}
+    try:
+        await service.unsubscribe_channel(user_id, body.channel_id)
+        return {"detail": "unsubscribed"}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @app.get("/channels/mine")
 async def my_channels(user_id: str = Depends(get_current_user_id)):
-    channels = await service.get_my_channels(user_id)
-    return {"channels": channels}
+    try:
+        channels = await service.get_my_channels(user_id)
+        return {"channels": channels}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

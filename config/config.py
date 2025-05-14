@@ -16,8 +16,9 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
 
-    # JWT
+    # JWT and session keys
     JWT_SECRET_KEY: str
+    SESSION_SECRET_KEY: str
 
     class Config:
         env_file = ".env"
