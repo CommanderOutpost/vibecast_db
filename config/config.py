@@ -1,4 +1,6 @@
+from typing import Optional
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
@@ -10,18 +12,25 @@ class Settings(BaseSettings):
     REDIS_HOST: str
     REDIS_PORT: int
     REDIS_DB: int
-    
+
     # External API keys
     YOUTUBE_API_KEY: str
-    GOOGLE_CLIENT_ID: str
-    GOOGLE_CLIENT_SECRET: str
+
+    # Google OAuth credentials (optional)
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
 
     # JWT and session keys
     JWT_SECRET_KEY: str
     SESSION_SECRET_KEY: str
 
-    class Config:
-        env_file = ".env"
+    # Celery broker/backend
+    CELERY_BROKER_URL: Optional[str] = None
+    CELERY_BACKEND_URL: Optional[str] = None
+
+    model_config = ConfigDict(
+        env_file=".env",
+    )
 
 
 settings = Settings()

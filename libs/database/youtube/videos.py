@@ -28,9 +28,8 @@ async def create_videos(videos: list):
                 "name": video["name"],
                 "youtube_video_id": video["youtube_video_id"],
                 "channel_id": ObjectId(video["channel_id"]),
-                "title": video["title"],
-                "publishTime": video["publish_time"],
-                "viewCount": video["view_count"],
+                "publish_time": video["publish_time"],
+                "view_count": video["view_count"],
             }
             for video in videos
         ]
@@ -41,3 +40,17 @@ async def create_videos(videos: list):
 async def get_videos_by_channel_id(channel_id: str):
     cursor = db.videos.find({"channel_id": ObjectId(channel_id)})
     return [video async for video in cursor]
+
+
+async def get_video_by_id(video_id: str):
+    video = await db.videos.find_one({"_id": ObjectId(video_id)})
+    if not video:
+        return None
+    return {
+        "id": str(video["_id"]),
+        "name": video.get("name"),
+        "youtube_video_id": video.get("youtube_video_id"),
+        "channel_id": str(video.get("channel_id")),
+        "publish_time": video.get("publish_time"),
+        "view_count": video.get("view_count"),
+    }

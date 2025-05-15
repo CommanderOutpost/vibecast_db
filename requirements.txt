@@ -10,3 +10,5 @@ httpx
 pydantic[email]
 python-jose[cryptography]
 starlette[session]
+celery
+redis

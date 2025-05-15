@@ -18,6 +18,7 @@ app = FastAPI(title="Gateway")
 # configuration knobs (env-controlled)
 # ---------------------------------------------------------------------------
 USERS_SERVICE_URL = os.getenv("USERS_SERVICE_URL", "http://users:8001")
+YOUTUBE_SERVICE_URL = os.getenv("YOUTUBE_SERVICE_URL", "http://youtube:8002")
 MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", 1 * 1024 * 1024))  # 1 MiB
 REQUESTS_PER_MINUTE = int(os.getenv("REQUESTS_PER_MINUTE", 60))
 
@@ -73,13 +74,11 @@ def _scrub_headers(headers) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# proxy route
+# generic proxy helper
 # ---------------------------------------------------------------------------
-@app.api_route(
-    "/users/{full_path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-)
-async def proxy_users(full_path: str, request: Request):
+async def _proxy_request(
+    service_url: str, full_path: str, request: Request
+) -> Response:
     # rate-limit
     client_ip = request.headers.get("x-forwarded-for", request.client.host)
     if not _is_allowed(client_ip):
@@ -99,7 +98,7 @@ async def proxy_users(full_path: str, request: Request):
     clean_headers = _scrub_headers(request.headers.raw)
 
     async with httpx.AsyncClient(
-        base_url=USERS_SERVICE_URL,
+        base_url=service_url,
         timeout=30.0,
     ) as client:
         proxied_req = client.build_request(
@@ -126,3 +125,24 @@ async def proxy_users(full_path: str, request: Request):
             status_code=proxied_resp.status_code,
             headers=resp_headers,
         )
+
+
+# ---------------------------------------------------------------------------
+# proxy routes
+# ---------------------------------------------------------------------------
+
+
+@app.api_route(
+    "/users/{full_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+async def proxy_users(full_path: str, request: Request):
+    return await _proxy_request(USERS_SERVICE_URL, full_path, request)
+
+
+@app.api_route(
+    "/youtube/{full_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+async def proxy_youtube(full_path: str, request: Request):
+    return await _proxy_request(YOUTUBE_SERVICE_URL, full_path, request)

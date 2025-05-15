@@ -1,33 +1,47 @@
+from fastapi import HTTPException, status
 from googleapiclient.discovery import build
 from typing import List, Dict
-from database.youtube.videos import create_videos
+from libs.database.youtube.channels import get_channel_by_id
+from libs.database.youtube.videos import create_videos
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-async def get_all_videos_from_channel(
-    api_key: str, channel_id: str, mongo_channel_id: str
-) -> List[Dict]:
+async def get_all_videos_from_channel(api_key: str, channel_id: str) -> List[Dict]:
     """
     Fetches all videos from a YouTube channel using its uploads playlist.
-
-    Args:
-        api_key (str): YouTube Data API key.
-        channel_id (str): The channel's unique ID (e.g. 'UC_x5XG1OV2P6uZZ5FSM9Ttw').
-
-    Returns:
-        List[Dict]: List of dicts with 'videoId', 'title', 'viewCount', and 'publishTime'.
+    If the channel doesn't exist or is inaccessible, returns [].
     """
     youtube = build("youtube", "v3", developerKey=api_key)
 
-    # Step 1: Get the Uploads playlist ID
+    # 1) look up our Channel doc
+    ch_doc = await get_channel_by_id(channel_id)
+    if not ch_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Channel document {channel_id!r} not found",
+        )
+        
+    print(f"Channel doc: {ch_doc}")
+
+    # 2) ask YouTube for that channel’s uploads playlist
     channel_response = (
-        youtube.channels().list(part="contentDetails", id=channel_id).execute()
+        youtube.channels()
+        .list(part="contentDetails", id=ch_doc["youtube_channel_id"])
+        .execute()
     )
 
-    uploads_playlist_id = channel_response["items"][0]["contentDetails"][
-        "relatedPlaylists"
-    ]["uploads"]
+    items = channel_response.get("items")
+    if not items:
+        logger.warning(
+            "No YouTube channel found or accessible with ID %s",
+            ch_doc["youtube_channel_id"],
+        )
+        return []
 
-    # Step 2: Get all videos from the uploads playlist
+    uploads_playlist_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+
     videos = []
     next_page_token = None
 
@@ -43,25 +57,28 @@ async def get_all_videos_from_channel(
             .execute()
         )
 
-        video_ids = []
-        for item in playlist_response["items"]:
-            video_ids.append(item["snippet"]["resourceId"]["videoId"])
+        video_ids = [
+            item["snippet"]["resourceId"]["videoId"]
+            for item in playlist_response.get("items", [])
+        ]
 
-        # Step 3: Fetch video details
+        if not video_ids:
+            break
+
         video_details_response = (
             youtube.videos()
             .list(part="statistics,snippet", id=",".join(video_ids))
             .execute()
         )
 
-        for item in video_details_response["items"]:
+        for item in video_details_response.get("items", []):
             videos.append(
                 {
                     "name": item["snippet"]["title"],
                     "youtube_video_id": item["id"],
                     "publish_time": item["snippet"]["publishedAt"],
                     "view_count": int(item["statistics"].get("viewCount", 0)),
-                    "channel_id": mongo_channel_id,
+                    "channel_id": channel_id,
                 }
             )
 
@@ -69,6 +86,7 @@ async def get_all_videos_from_channel(
         if not next_page_token:
             break
 
-    await create_videos(videos)
+    if videos:
+        await create_videos(videos)
 
     return videos
