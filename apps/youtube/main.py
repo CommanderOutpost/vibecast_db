@@ -13,7 +13,7 @@ from libs.database.youtube.channels import (
     create_channel,
 )
 from libs.database.youtube.videos import get_videos_by_channel_id
-from libs.tasks import enqueue_sync_channel, enqueue_grab_comments  # Celery wrappers
+from libs.tasks_youtube import enqueue_sync_channel, enqueue_grab_comments  # Celery wrappers
 
 app = FastAPI(title="YouTube Service")
 

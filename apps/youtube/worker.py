@@ -1,8 +1,8 @@
 # apps/youtube/worker.py
 
-import os
 from celery import Celery
 from config.config import settings
+from libs.agents.comments_analyzer.comments_analyzer import analyze_and_store_comments
 from libs.youtube.get_all_videos_from_channel import get_all_videos_from_channel
 from libs.youtube.get_youtube_comments import get_youtube_comments
 
@@ -24,6 +24,9 @@ celery = Celery(
     broker=broker_url,
     backend=backend_url,
 )
+celery.conf.update(task_track_started=True, task_serializer="json")
+
+celery = Celery("agents_worker", broker=broker_url, backend=backend_url)
 celery.conf.update(task_track_started=True, task_serializer="json")
 
 
