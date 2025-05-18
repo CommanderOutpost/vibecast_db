@@ -12,3 +12,4 @@ python-jose[cryptography]
 starlette[session]
 celery
 redis
+openai

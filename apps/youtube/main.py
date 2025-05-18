@@ -13,7 +13,8 @@ from libs.database.youtube.channels import (
     create_channel,
 )
 from libs.database.youtube.videos import get_videos_by_channel_id
-from libs.tasks import enqueue_sync_channel, enqueue_grab_comments  # Celery wrappers
+from libs.tasks_youtube import enqueue_sync_channel, enqueue_grab_comments
+from libs.youtube.service import get_channel_info  # Celery wrappers
 
 app = FastAPI(title="YouTube Service")
 
@@ -49,6 +50,16 @@ async def sync_channel(body: SyncBody, background: BackgroundTasks):
     }
 
 
+@app.get("/channels/{channel_id}", status_code=200)
+async def read_channel(channel_id: str):
+    """
+    Return the full channel document (including snippet, statistics, etc)
+    for the given Mongo _id.
+    """
+    channel = await get_channel_info(channel_id)
+    return channel
+
+
 @app.get("/channels/{channel_id}/videos")
 async def list_videos(channel_id: str):
     try:
@@ -58,20 +69,20 @@ async def list_videos(channel_id: str):
 
     raw_videos = await get_videos_by_channel_id(channel_id)
 
-    # --- MODIFIED: build a fresh list of plain dicts, no ObjectId anywhere ---
-    videos: List[Dict[str, Any]] = []
+    videos = []
     for v in raw_videos:
         videos.append(
             {
-                # Convert _id → id, and wrap in str()
                 "id": str(v["_id"]),
                 "name": v.get("name"),
+                "description": v.get("description"),
                 "youtube_video_id": v.get("youtube_video_id"),
-                # Convert channel_id ObjectId → str
                 "channel_id": str(v.get("channel_id")),
-                # Support both snake_case (new) and camelCase (old) fields:
-                "publish_time": v.get("publish_time") or v.get("publishTime"),
-                "view_count": v.get("view_count") or v.get("viewCount"),
+                "publish_time": v.get("publish_time"),
+                "view_count": v.get("view_count"),
+                "like_count": v.get("like_count"),
+                "comment_count": v.get("comment_count"),
+                "duration": v.get("duration"),
             }
         )
 

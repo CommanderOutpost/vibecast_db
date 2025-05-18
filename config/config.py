@@ -1,6 +1,7 @@
 from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
+from openai import OpenAI
 
 
 class Settings(BaseSettings):
@@ -15,10 +16,9 @@ class Settings(BaseSettings):
 
     # External API keys
     YOUTUBE_API_KEY: str
-
-    # Google OAuth credentials (optional)
-    GOOGLE_CLIENT_ID: Optional[str] = None
-    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+    OPENAI_API_KEY: str
 
     # JWT and session keys
     JWT_SECRET_KEY: str
@@ -34,3 +34,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+openai_client = OpenAI(api_key=settings.OPENAI_API_KEY)

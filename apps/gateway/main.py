@@ -19,6 +19,7 @@ app = FastAPI(title="Gateway")
 # ---------------------------------------------------------------------------
 USERS_SERVICE_URL = os.getenv("USERS_SERVICE_URL", "http://users:8001")
 YOUTUBE_SERVICE_URL = os.getenv("YOUTUBE_SERVICE_URL", "http://youtube:8002")
+AGENTS_SERVICE_URL = os.getenv("AGENTS_SERVICE_URL", "http://agents:8003")
 MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", 1 * 1024 * 1024))  # 1 MiB
 REQUESTS_PER_MINUTE = int(os.getenv("REQUESTS_PER_MINUTE", 60))
 
@@ -146,3 +147,11 @@ async def proxy_users(full_path: str, request: Request):
 )
 async def proxy_youtube(full_path: str, request: Request):
     return await _proxy_request(YOUTUBE_SERVICE_URL, full_path, request)
+
+
+@app.api_route(
+    "/agents/{full_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+async def proxy_agents(full_path: str, request: Request):
+    return await _proxy_request(AGENTS_SERVICE_URL, full_path, request)

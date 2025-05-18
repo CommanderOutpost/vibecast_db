@@ -44,7 +44,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     Produce a JWT including `data` as payload under 'sub', signed with our secret.
     """
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=1))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=24))
     to_encode.update({"exp": expire})
     token = jose_jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
     return token
