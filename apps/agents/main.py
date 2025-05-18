@@ -1,3 +1,4 @@
+from typing import Any, Dict, List
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Depends, status
 from pydantic import BaseModel
 from bson import ObjectId
@@ -17,6 +18,17 @@ class AnalyzeResponse(BaseModel):
     result: str
 
 
+class VideoAnalysisResponse(BaseModel):
+    id: str
+    comment_id: str
+    sentiments: Dict[str, int]
+    headline: str
+    discussions: Dict[str, List[str]]
+    people: List[Dict[str, Any]]
+    other_insights: List[str]
+    video_requests: List[str]
+
+
 async def _verify_video_access(user_id: str, video_id: str) -> None:
     """
     Throws an HTTPException if the user is not allowed to analyze this video.
@@ -32,6 +44,7 @@ async def _verify_video_access(user_id: str, video_id: str) -> None:
 
     # 2) must exist
     video = await get_video_by_id(video_id)
+    print(video)
     if not video:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -74,28 +87,39 @@ async def analyze_comments_route(
     return {"result": f"analysis queued for {video_id}"}
 
 
-@app.get("/analysis/{video_id}")
+@app.get(
+    "/analysis/{video_id}",
+    response_model=VideoAnalysisResponse,
+)
 async def get_analysis_route(
     video_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    # reuse the same guard logic to validate ID, existence, comments fetched, and ownership
+    # Same ownership / existence guard as before
     await _verify_video_access(user_id, video_id)
 
-    # fetch the analysis document
     doc = await get_analysis_by_comment_id(video_id)
     if not doc or not doc.get("analysis"):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="No analysis found"
         )
 
-    # prepare a JSON-friendly response, converting ObjectIds to strings
-    analysis = doc["analysis"]
+    a = doc["analysis"]
+
+    # Fallback for any legacy docs that still have "major_discussions"
+    discussions = (
+        a.get("discussions")
+        or a.get("major_discussions")
+        or {"video": [], "creator": [], "topic": []}
+    )
+
     return {
         "id": str(doc["_id"]),
         "comment_id": str(doc["comment_id"]),
-        "sentiments": analysis.get("sentiments"),
-        "major_discussions": analysis.get("major_discussions"),
-        "other_insights": analysis.get("other_insights"),
-        "video_requests": analysis.get("video_requests"),
+        "sentiments": a.get("sentiments"),
+        "headline": a.get("headline", ""),
+        "discussions": discussions,
+        "people": a.get("people", []),
+        "other_insights": a.get("other_insights", []),
+        "video_requests": a.get("video_requests", []),
     }

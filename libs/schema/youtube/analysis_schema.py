@@ -1,5 +1,4 @@
-# libs/schema/youtube/analysis.schema.py
-
+# libs/schema/youtube/analysis_schema.py
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 from bson import ObjectId
@@ -17,15 +16,27 @@ class PyObjectId(ObjectId):
         return ObjectId(v)
 
 
+class SentimentTriplet(BaseModel):
+    video: int
+    creator: int
+    topic: int
+
+
+class PersonInsight(BaseModel):
+    name: str
+    sentiment: Dict[str, int]  # positive / neutral / negative %
+    remarks: List[str] = []  # up-to-three short remarks
+
+
 class AnalysisSchema(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     comment_id: PyObjectId
-    sentiments: Optional[Dict[str, Optional[int]]]  # may be None if missing
-    major_discussions: Dict[
-        str, List[str]
-    ]  # always includes keys video, topic, creator
-    other_insights: List[str]
-    video_requests: List[str]
+    sentiments: SentimentTriplet
+    headline: str
+    discussions: Dict[str, List[str]]  # video / topic / creator
+    people: List[PersonInsight]
+    other_insights: List[str] = []
+    video_requests: List[str] = []
 
     class Config:
         arbitrary_types_allowed = True

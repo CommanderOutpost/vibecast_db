@@ -1,3 +1,4 @@
+from typing import Dict, List
 from config.database import db
 from bson import ObjectId
 
@@ -21,20 +22,28 @@ async def create_video(
     return str(result.inserted_id)
 
 
-async def create_videos(videos: list):
+async def create_videos(videos: List[Dict]) -> List[str]:
+    """
+    Bulk-insert a list of video dicts (already validated / shaped).
+    Returns list[str] of inserted _id values.
+    """
     result = await db.videos.insert_many(
         [
             {
-                "name": video["name"],
-                "youtube_video_id": video["youtube_video_id"],
-                "channel_id": ObjectId(video["channel_id"]),
-                "publish_time": video["publish_time"],
-                "view_count": video["view_count"],
+                "name": v["name"],
+                "description": v.get("description"),
+                "youtube_video_id": v["youtube_video_id"],
+                "channel_id": ObjectId(v["channel_id"]),
+                "publish_time": v["publish_time"],
+                "view_count": v["view_count"],
+                "like_count": v.get("like_count"),
+                "comment_count": v.get("comment_count"),
+                "duration": v.get("duration"),
             }
-            for video in videos
+            for v in videos
         ]
     )
-    return [str(video_id) for video_id in result.inserted_ids]
+    return [str(_id) for _id in result.inserted_ids]
 
 
 async def get_videos_by_channel_id(channel_id: str):
@@ -42,15 +51,20 @@ async def get_videos_by_channel_id(channel_id: str):
     return [video async for video in cursor]
 
 
-async def get_video_by_id(video_id: str):
-    video = await db.videos.find_one({"_id": ObjectId(video_id)})
-    if not video:
+async def get_video_by_id(video_id: str) -> Dict | None:
+    v = await db.videos.find_one({"_id": ObjectId(video_id)})
+    if not v:
         return None
+    # flatten & stringify for callers
     return {
-        "id": str(video["_id"]),
-        "name": video.get("name"),
-        "youtube_video_id": video.get("youtube_video_id"),
-        "channel_id": str(video.get("channel_id")),
-        "publish_time": video.get("publish_time"),
-        "view_count": video.get("view_count"),
+        "id": str(v["_id"]),
+        "name": v.get("name"),
+        "description": v.get("description"),
+        "youtube_video_id": v.get("youtube_video_id"),
+        "channel_id": str(v.get("channel_id")),
+        "publish_time": v.get("publish_time"),
+        "view_count": v.get("view_count"),
+        "like_count": v.get("like_count"),
+        "comment_count": v.get("comment_count"),
+        "duration": v.get("duration"),
     }

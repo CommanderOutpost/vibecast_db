@@ -1,96 +1,118 @@
-import json
-from config.config import openai_client
-from libs.database.youtube.comments import (
-    get_comments_by_video_id,
-)
-from libs.agents.prompts.comments_analyzer_prompts import generate_prompt
+# libs/agents/comments_analyzer/comments_analyzer.py
+"""
+Pull YouTube-comment text from Mongo, enrich it with video + channel
+metadata, run our extractor agents, and upsert the resulting analytics
+document.
+
+The added “Channel name / Video title” pre-amble gives every extractor
+more context so it can reference the creator or the video naturally.
+"""
+
+import asyncio
+from typing import Optional, Dict
+
+from config.config import openai_client  # still used by sibling extractors
+from libs.database.youtube.comments import get_comments_by_video_id
+from libs.database.youtube.videos import get_video_by_id
+from libs.database.youtube.channels import get_channel_by_id
 from libs.database.youtube.analysis import (
     create_analysis,
     get_analysis_by_comment_id,
     update_analysis,
 )
-from libs.agents.analytics_extractor.analytics_extractor import (
-    extract_sentiment_ratings,
-    extract_major_discussions,
-    extract_other_insights,
-    extract_video_requests,
-)
+
+# extractor helpers ----------------------------------------------------------
+from libs.agents.extractors.sentiment import extract_sentiments
+from libs.agents.extractors.headline import extract_headline
+from libs.agents.extractors.discussions import extract_discussions
+from libs.agents.extractors.people import extract_people
+from libs.agents.extractors.other import extract_other_insights, extract_video_requests
 
 
-async def analyze_comments(
-    video_id: str, analytics: str = None, model: str = "gpt-4o-mini"
-) -> str:
+async def _meta_block(video_id: str) -> Optional[str]:
     """
-    Analyze the comments (or previous analytics) for a given video ID.
-    If `analytics` is provided, the AI will only update sections with major changes.
-    """
-    comments_doc = await get_comments_by_video_id(video_id)
-    if not comments_doc:
-        return ""
+    Build a context header such as:
 
-    prompt = generate_prompt(comments_doc["comments"], analytics)
-    response = openai_client.chat.completions.create(
-        model=model, messages=[{"role": "user", "content": prompt}]
+        Channel name : Ludwig
+        Video title  : I Tried Chessboxing
+        Published    : 2023-01-02T18:00:05Z
+        Views        : 1_234_567
+        Likes        : 98_765
+        Duration     : PT8M11S
+        Description  : (first 300 chars…)
+
+    Returns the block or None if lookup fails.
+    """
+    v = await get_video_by_id(video_id)
+    if not v:
+        return None
+
+    c = await get_channel_by_id(v["channel_id"])
+    if not c:
+        return None
+
+    desc = (v.get("description") or "").strip().replace("\n", " ")[:300]
+    if len(desc) == 300:
+        desc += "…"
+
+    return (
+        f"Channel name : {c['name']}\n"
+        f"Video title  : {v['name']}\n"
+        f"Published    : {v['publish_time']}\n"
+        f"Views        : {v['view_count']}\n"
+        f"Likes        : {v.get('like_count','NA')}\n"
+        f"Duration     : {v.get('duration','NA')}\n"
+        f"Description  : {desc}\n\n"
     )
-    return response.choices[0].message.content
 
 
 async def analyze_and_store_comments(video_id: str) -> str:
     """
-    Full pipeline: load prior analysis, run AI, extract fields, normalize defaults,
-    then create or update the DB record.
+    Full pipeline: comments → extractors → (upsert) analysis doc.
     """
-    prev = await get_analysis_by_comment_id(video_id)
-    analytics_json = (
-        json.dumps(prev["analysis"]) if prev and prev.get("analysis") else None
-    )
-
-    analysis_text = await analyze_comments(video_id, analytics_json)
-    if not analysis_text:
+    comments_doc = await get_comments_by_video_id(video_id)
+    if not comments_doc:
+        # Nothing to analyse
         return ""
 
-    # Extract and normalize
-    sent = extract_sentiment_ratings(analysis_text) or {
-        k: None for k in ("video_sentiment", "topic_sentiment", "creator_sentiment")
-    }
+    meta = await _meta_block(video_id) or ""
+    comments_text = "\n".join(comments_doc["comments"])
 
-    def safe_extract(func, default):
-        try:
-            result = func(analysis_text)
-            return result or default
-        except Exception:
-            return default
+    # -----------------------------------------------------------------------
+    # 1) run the extractors
+    # -----------------------------------------------------------------------
+    blob = meta + comments_text
 
-    major = safe_extract(
-        extract_major_discussions, {"video": [], "topic": [], "creator": []}
+    sentiments = await extract_sentiments(blob)
+    headline_task = extract_headline(blob, sentiments)
+    discussions_task = extract_discussions(blob)
+    people_task = extract_people(
+        blob, comments_text
+    )  # keep raw comments for de-hallucination
+    other_task = extract_other_insights(blob)
+    requests_task = extract_video_requests(blob)
+
+    headline, discussions, people, other, requests = await asyncio.gather(
+        headline_task, discussions_task, people_task, other_task, requests_task
     )
-    for key in ("video", "topic", "creator"):
-        major.setdefault(key, [])
 
-    insights = safe_extract(extract_other_insights, [])
-    requests = safe_extract(extract_video_requests, [])
+    # -----------------------------------------------------------------------
+    # 2) upsert the analysis document
+    # -----------------------------------------------------------------------
+    prev = await get_analysis_by_comment_id(video_id)
+    fields: Dict = dict(
+        sentiments=sentiments,
+        headline=headline,
+        discussions=discussions,
+        people=people,
+        other_insights=other,
+        video_requests=requests,
+    )
 
-    # Determine update vs create
     if not prev:
-        return await create_analysis(
-            comment_id=video_id,
-            sentiments=sent,
-            major_discussions=major,
-            other_insights=insights,
-            video_requests=requests,
-        )
+        return await create_analysis(comment_id=video_id, **fields)
 
-    # Build diffed fields
-    fields = {}
-    if sent != prev["analysis"]["sentiments"]:
-        fields["sentiments"] = sent
-    if major != prev["analysis"]["major_discussions"]:
-        fields["major_discussions"] = major
-    if insights != prev["analysis"]["other_insights"]:
-        fields["other_insights"] = insights
-    if requests != prev["analysis"].get("video_requests", []):
-        fields["video_requests"] = requests
-
-    if fields:
+    if any(prev["analysis"].get(k) != v for k, v in fields.items()):
         await update_analysis(comment_id=video_id, **fields)
+
     return str(prev["_id"])

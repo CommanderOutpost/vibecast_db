@@ -34,6 +34,11 @@ class LoginBody(BaseModel):
     password: str
 
 
+class SubscribeBody(BaseModel):
+    handle: str
+    is_owner: bool = False
+
+
 class ChannelBody(BaseModel):
     channel_id: str
     is_owner: bool = False
@@ -121,11 +126,11 @@ async def google_callback(request: Request):
 
 @app.post("/channels/subscribe")
 async def subscribe_channel(
-    body: ChannelBody, user_id: str = Depends(get_current_user_id)
+    body: SubscribeBody, user_id: str = Depends(get_current_user_id)
 ):
     try:
-        await service.subscribe_channel(user_id, body.channel_id, body.is_owner)
-        return {"detail": "subscribed"}
+        channel = await service.subscribe_channel(user_id, body.handle, body.is_owner)
+        return {"channel": channel}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

@@ -50,6 +50,29 @@ async def add_channel_to_user(user_id: str, channel_id: str, is_owner: bool):
     )
 
 
+async def subscribe_user_to_channel(
+    user_id: str, channel_id: str, is_owner: bool
+) -> bool:
+    """
+    Atomically push a {channel_id, is_owner} entry into the user's channels array
+    only if that channel_id isn’t already present.
+    Returns True if it was added, False if it was already there.
+    """
+    result = await db.users.update_one(
+        {
+            "_id": ObjectId(user_id),
+            "channels.channel_id": {"$ne": ObjectId(channel_id)},
+        },
+        {
+            "$push": {
+                "channels": {"channel_id": ObjectId(channel_id), "is_owner": is_owner}
+            }
+        },
+    )
+    # modified_count == 1 means the push actually happened
+    return result.modified_count == 1
+
+
 async def remove_channel_from_user(user_id: str, channel_id: str):
     """
     Pulls any matching channel_id entry out of the user's channels array.

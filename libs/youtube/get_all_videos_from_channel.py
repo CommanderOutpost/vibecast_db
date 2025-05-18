@@ -1,3 +1,4 @@
+# libs/youtube/get_all_videos_from_channel.py
 from fastapi import HTTPException, status
 from googleapiclient.discovery import build
 from typing import List, Dict
@@ -10,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 async def get_all_videos_from_channel(api_key: str, channel_id: str) -> List[Dict]:
     """
-    Fetches all videos from a YouTube channel using its uploads playlist.
-    If the channel doesn't exist or is inaccessible, returns [].
+    Crawl every video in the channel’s “uploads” playlist, pull rich metadata,
+    stash to Mongo, and return the list we saved.
     """
     youtube = build("youtube", "v3", developerKey=api_key)
 
@@ -22,68 +23,72 @@ async def get_all_videos_from_channel(api_key: str, channel_id: str) -> List[Dic
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Channel document {channel_id!r} not found",
         )
-        
-    print(f"Channel doc: {ch_doc}")
 
-    # 2) ask YouTube for that channel’s uploads playlist
-    channel_response = (
+    uploads_pid = (
         youtube.channels()
         .list(part="contentDetails", id=ch_doc["youtube_channel_id"])
-        .execute()
+        .execute()["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
     )
 
-    items = channel_response.get("items")
-    if not items:
-        logger.warning(
-            "No YouTube channel found or accessible with ID %s",
-            ch_doc["youtube_channel_id"],
-        )
-        return []
-
-    uploads_playlist_id = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
-
-    videos = []
-    next_page_token = None
+    videos: List[Dict] = []
+    next_page = None
 
     while True:
-        playlist_response = (
+        playlist_resp = (
             youtube.playlistItems()
             .list(
                 part="snippet",
-                playlistId=uploads_playlist_id,
+                playlistId=uploads_pid,
                 maxResults=50,
-                pageToken=next_page_token,
+                pageToken=next_page,
             )
             .execute()
         )
 
         video_ids = [
             item["snippet"]["resourceId"]["videoId"]
-            for item in playlist_response.get("items", [])
+            for item in playlist_resp.get("items", [])
         ]
-
         if not video_ids:
             break
 
-        video_details_response = (
+        details_resp = (
             youtube.videos()
-            .list(part="statistics,snippet", id=",".join(video_ids))
+            .list(
+                part="snippet,statistics,contentDetails",
+                id=",".join(video_ids),
+                maxResults=50,
+            )
             .execute()
         )
 
-        for item in video_details_response.get("items", []):
+        for item in details_resp.get("items", []):
+            snip = item["snippet"]
+            stats = item["statistics"]
+            cdet = item["contentDetails"]
+
             videos.append(
                 {
-                    "name": item["snippet"]["title"],
+                    "name": snip["title"],
+                    "description": snip.get("description"),
                     "youtube_video_id": item["id"],
-                    "publish_time": item["snippet"]["publishedAt"],
-                    "view_count": int(item["statistics"].get("viewCount", 0)),
+                    "publish_time": snip["publishedAt"],
+                    "view_count": int(stats.get("viewCount", 0)),
+                    "like_count": (
+                        int(stats.get("likeCount", 0)) if "likeCount" in stats else None
+                    ),
+                    "comment_count": (
+                        int(stats.get("commentCount", 0))
+                        if "commentCount" in stats
+                        else None
+                    ),
+                    "duration": cdet.get("duration"),  # ISO 8601
                     "channel_id": channel_id,
                 }
             )
 
-        next_page_token = playlist_response.get("nextPageToken")
-        if not next_page_token:
+        next_page = playlist_resp.get("nextPageToken")
+        if not next_page:
             break
 
     if videos:
