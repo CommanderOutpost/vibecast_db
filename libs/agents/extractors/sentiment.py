@@ -7,7 +7,12 @@ from config.config import openai_client
 
 async def extract_sentiments(text: str) -> dict:
     """
-    Returns {"video": int, "creator": int, "topic": int}
+    Returns e.g.
+    {
+      "video":   {"positive": 60, "neutral": 30, "negative": 10},
+      "creator": {"positive": 55, "neutral": 35, "negative": 10},
+      "topic":   {"positive": 40, "neutral": 45, "negative": 15}
+    }
     """
     resp = openai_client.chat.completions.create(
         model="gpt-4o-mini",

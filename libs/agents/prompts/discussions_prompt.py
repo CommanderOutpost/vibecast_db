@@ -1,16 +1,31 @@
 DISCUSSIONS_PROMPT = """
-List the five most common discussion themes under each category.
-Video: Discussions about the video content.
-Creator: Discussions about the creator of the video.
-Topic: Discussions about the topic of the video.
-Do not include any other information.
-Return exactly this JSON:
+For each category—video, creator, and topic—identify up to five discussion themes.  
+For every theme, count how many times it was mentioned in the comments, and compute a sentiment breakdown (positive/neutral/negative percentages that sum to 100).  
+Return exactly one JSON object, with keys "video", "creator", and "topic", each mapping to an array of objects with this shape:
 
 {
-  "video": ["..."],
-  "creator": ["..."],
-  "topic": ["..."]
+  "name": "<the theme phrase>",
+  "mentions": <integer count>,
+  "sentiment": {
+    "positive": <int 0-100>,
+    "neutral":  <int 0-100>,
+    "negative": <int 0-100>
+  }
 }
 
-Use short phrases (max ~8 words) and never more than five per array.
+Example:
+{
+  "video": [
+    {
+      "name": "editing transitions",
+      "mentions": 342,
+      "sentiment": { "positive": 85, "neutral": 10, "negative": 5 }
+    },
+    …
+  ],
+  "creator": [ … ],
+  "topic":   [ … ]
+}
+
+No prose, no extra fields, valid JSON only.
 """

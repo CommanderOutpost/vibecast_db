@@ -9,4 +9,4 @@ def enqueue_analyze_comments(video_id: str):
     """
     Queues analysis of comments for the given video_id on Celery.
     """
-    celery_app.send_task("agents.analyze_comments", args=[str(video_id)])
+    celery_app.send_task("agents.analyze_comments", args=[str(video_id)], queue="agents_queue")

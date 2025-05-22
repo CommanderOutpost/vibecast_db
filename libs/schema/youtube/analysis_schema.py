@@ -16,24 +16,35 @@ class PyObjectId(ObjectId):
         return ObjectId(v)
 
 
-class SentimentTriplet(BaseModel):
-    video: int
-    creator: int
-    topic: int
+class SentimentBreakdown(BaseModel):
+    positive: int
+    neutral: int
+    negative: int
+
+
+class Sentiments(BaseModel):
+    video: SentimentBreakdown
+    creator: SentimentBreakdown
+    topic: SentimentBreakdown
 
 
 class PersonInsight(BaseModel):
     name: str
     sentiment: Dict[str, int]  # positive / neutral / negative %
     remarks: List[str] = []  # up-to-three short remarks
+    
+class DiscussionItem(BaseModel):
+    name: str
+    mentions: int
+    sentiment: SentimentBreakdown
 
 
 class AnalysisSchema(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     comment_id: PyObjectId
-    sentiments: SentimentTriplet
+    sentiments: Sentiments
     headline: str
-    discussions: Dict[str, List[str]]  # video / topic / creator
+    discussions: Dict[str, List[DiscussionItem]]  # video / topic / creator
     people: List[PersonInsight]
     other_insights: List[str] = []
     video_requests: List[str] = []

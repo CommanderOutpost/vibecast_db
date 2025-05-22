@@ -68,3 +68,17 @@ async def get_video_by_id(video_id: str) -> Dict | None:
         "comment_count": v.get("comment_count"),
         "duration": v.get("duration"),
     }
+
+
+async def get_videos_by_ids(video_ids: List[str]) -> List[dict]:
+    ids = [ObjectId(vid) for vid in video_ids]
+    cursor = db.videos.find({"_id": {"$in": ids}})
+    return [
+        {
+            "id": str(v["_id"]),
+            "name": v.get("name"),
+            "publish_time": v.get("publish_time"),
+            "channel_id": str(v.get("channel_id")),
+        }
+        async for v in cursor
+    ]

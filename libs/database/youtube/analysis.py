@@ -49,3 +49,13 @@ async def update_analysis(comment_id: str, **fields) -> int:
 
 async def get_analysis_by_comment_id(comment_id: str):
     return await db.comment_analysis.find_one({"comment_id": ObjectId(comment_id)})
+
+
+async def get_analyses_by_video_ids(video_ids: List[str]) -> List[dict]:
+    """
+    Fetch all analysis docs whose comment_id (== video_id) is in `video_ids`.
+    Returns a list – empty if none were found.
+    """
+    ids = [ObjectId(v_id) for v_id in video_ids]
+    cursor = db.comment_analysis.find({"comment_id": {"$in": ids}})
+    return [doc async for doc in cursor]
