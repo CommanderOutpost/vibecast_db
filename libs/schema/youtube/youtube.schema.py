@@ -61,6 +61,9 @@ class Statistics(BaseModel):
     hiddenSubscriberCount: bool
     videoCount: int
 
+class CommentThread(BaseModel):
+    text: str
+    replies: List[str]
 
 # ---------------------------------------------------------------------------#
 # channel                                                                    #
@@ -107,7 +110,7 @@ class VideoSchema(BaseModel):
 class CommentSchema(BaseModel):
     id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     video_id: PyObjectId
-    comments: List[str]
+    comments: List[CommentThread]
 
     class Config:
         arbitrary_types_allowed = True

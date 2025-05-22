@@ -7,10 +7,15 @@ from typing import Any, Dict, List
 from fastapi import FastAPI, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel
 from bson import ObjectId
+from apps.utils import sanitize_mongo_document
 from libs.database.youtube.channels import (
     get_channel_by_youtube_id,
     get_channel_by_id,
     create_channel,
+)
+from libs.database.youtube.comments import (
+    delete_comments_by_video_id,
+    get_comments_by_video_id,
 )
 from libs.database.youtube.videos import get_videos_by_channel_id
 from libs.tasks_youtube import enqueue_sync_channel, enqueue_grab_comments
@@ -100,3 +105,34 @@ async def grab_comments(
         background = BackgroundTasks()
     background.add_task(enqueue_grab_comments, video_id=video_id, limit=limit)
     return {"detail": "comment crawl queued", "video_id": video_id}
+
+
+@app.get("/videos/{video_id}/comments")
+async def get_comments(video_id: str):
+    """
+    Fetch comments for a given video ID.
+    """
+    comments = await get_comments_by_video_id(video_id)
+    if not comments:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Comments for video {video_id!r} not found",
+        )
+
+    return {"comments": sanitize_mongo_document(comments)}
+
+
+@app.delete("/videos/{video_id}/comments")
+async def delete_comments(video_id: str):
+    """
+    Delete comments for a given video ID.
+    """
+    result = await get_comments_by_video_id(video_id)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Comments for video {video_id!r} not found",
+        )
+
+    await delete_comments_by_video_id(video_id)
+    return {"detail": "comments deleted", "video_id": video_id}

@@ -76,7 +76,13 @@ async def analyze_and_store_comments(video_id: str) -> str:
         return ""
 
     meta = await _meta_block(video_id) or ""
-    comments_text = "\n".join(comments_doc["comments"])
+    threads = comments_doc["comments"]
+    all_texts = []
+    for t in threads:
+        all_texts.append(f"[COMMENT] {t['text']}")
+        for reply in t.get("replies", []):
+            all_texts.append(f"[REPLY] {reply}")
+    comments_text = "\n".join(all_texts)
 
     # -----------------------------------------------------------------------
     # 1) run the extractors

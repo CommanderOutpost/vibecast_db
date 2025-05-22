@@ -11,3 +11,8 @@ async def create_comments(video_id: str, comments: list):
 
 async def get_comments_by_video_id(video_id: str):
     return await db.comments.find_one({"video_id": ObjectId(video_id)})
+
+
+async def delete_comments_by_video_id(video_id: str):
+    result = await db.comments.delete_one({"video_id": ObjectId(video_id)})
+    return result.deleted_count > 0
