@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # Celery broker/backend
     CELERY_BROKER_URL: Optional[str] = None
     CELERY_BACKEND_URL: Optional[str] = None
+    
+    # Service URLs
+    USERS_SERVICE_URL: str
+    YOUTUBE_SERVICE_URL: str
+    AGENTS_SERVICE_URL: str
 
     model_config = ConfigDict(
         env_file=".env",

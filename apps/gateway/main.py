@@ -8,18 +8,22 @@
 import os
 import time
 from typing import Dict
+import logging
+from config.config import settings
 
 import httpx
 from fastapi import FastAPI, Request, Response, HTTPException, status
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 app = FastAPI(title="Gateway")
 
 # ---------------------------------------------------------------------------
 # configuration knobs (env-controlled)
 # ---------------------------------------------------------------------------
-USERS_SERVICE_URL = os.getenv("USERS_SERVICE_URL", "http://users:8001")
-YOUTUBE_SERVICE_URL = os.getenv("YOUTUBE_SERVICE_URL", "http://youtube:8002")
-AGENTS_SERVICE_URL = os.getenv("AGENTS_SERVICE_URL", "http://agents:8003")
+USERS_SERVICE_URL = settings.USERS_SERVICE_URL
+YOUTUBE_SERVICE_URL = settings.YOUTUBE_SERVICE_URL
+AGENTS_SERVICE_URL = settings.AGENTS_SERVICE_URL
 MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", 1 * 1024 * 1024))  # 1 MiB
 REQUESTS_PER_MINUTE = int(os.getenv("REQUESTS_PER_MINUTE", 60))
 
@@ -112,6 +116,7 @@ async def _proxy_request(
         try:
             proxied_resp = await client.send(proxied_req, stream=True)
         except httpx.RequestError as exc:
+            logger.error("Error while proxying request: %s", exc)
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
         raw_body = await proxied_resp.aread()

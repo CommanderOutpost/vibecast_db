@@ -3,3 +3,10 @@ venv/
 print.txt
 __pycache__*
 todo.txt
+plan-features.txt
+generate_docs.sh
+agents.json
+users.json
+youtube.json
+gateway_openapi.json
+gateway-docs.html
