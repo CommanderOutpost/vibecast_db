@@ -95,6 +95,18 @@ async def login(body: LoginBody):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 
+@app.delete("/me", status_code=204)
+async def delete_account(user_id: str = Depends(get_current_user_id)):
+    """
+    Delete the authenticated user's account, along with all their subscriptions.
+    """
+    try:
+        await service.delete_account(user_id)
+    except HTTPException as e:
+        # If user not found or any other error, propagate
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e.detail))
+
+
 @app.get("/auth/google/login")
 async def google_login(request: Request):
     try:

@@ -14,6 +14,7 @@ from libs.database.users import (
     list_user_channels as db_list_channels,
     add_channel_to_user as db_add_channel,
     subscribe_user_to_channel,
+    delete_user as db_delete_user,
 )
 from libs.users.utils import (
     hash_password,
@@ -51,7 +52,7 @@ async def login(email: EmailStr, password: str) -> str:
     """
     user = await db_get_user_by_email(email)
     if not user or not verify_password(password, user["password_hash"]):
-        raise ValueError("Invalid credentials")
+        raise ValueError("Username or password is incorrect")
 
     return create_access_token({"sub": str(user["_id"])})
 
@@ -182,3 +183,17 @@ async def get_channel_info(channel_id: str) -> dict:
     doc.pop("_id", None)
 
     return doc
+
+
+async def delete_account(user_id: str) -> None:
+    """
+    Remove a user and all their subscriptions (the 'channels' array).
+    """
+    # No need to explicitly remove subscriptions anywhere else,
+    # since they're stored only in the user's document.
+    deleted = await db_delete_user(user_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User {user_id!r} not found or already deleted",
+        )

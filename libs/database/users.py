@@ -112,3 +112,12 @@ async def create_google_user(username: str, email: str, google_id: str) -> str:
         }
     )
     return str(result.inserted_id)
+
+
+async def delete_user(user_id: str) -> bool:
+    """
+    Deletes a user by their MongoDB _id.
+    Returns True if a document was deleted, False otherwise.
+    """
+    result = await db.users.delete_one({"_id": ObjectId(user_id)})
+    return result.deleted_count == 1
