@@ -1,7 +1,10 @@
 from typing import Optional
 from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
+from pydantic import ConfigDict, EmailStr
 from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -20,6 +23,10 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str
     OPENAI_API_KEY: str
 
+    # MAILER config
+    MAILER_API_KEY: str
+    MAILER_FROM_EMAIL: EmailStr
+
     # JWT and session keys
     JWT_SECRET_KEY: str
     SESSION_SECRET_KEY: str
@@ -27,7 +34,7 @@ class Settings(BaseSettings):
     # Celery broker/backend
     CELERY_BROKER_URL: Optional[str] = None
     CELERY_BACKEND_URL: Optional[str] = None
-    
+
     # Service URLs
     USERS_SERVICE_URL: str
     YOUTUBE_SERVICE_URL: str
